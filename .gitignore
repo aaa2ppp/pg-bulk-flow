@@ -1,0 +1,10 @@
+.env
+bin/
+tmp/
+*.out
+*.bin
+*.exe
+.DS_Store
+coverage.html
+cover.html
+*.pprof
