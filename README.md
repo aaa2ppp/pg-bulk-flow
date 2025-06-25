@@ -1,22 +1,31 @@
 ## Bulk Data Insertion Benchmark for PostgreSQL
 
 ### Overview
-A high-performance benchmarking tool designed to evaluate and compare different bulk insertion methods in PostgreSQL. The tool provides empirical data to help determine the optimal insertion strategy for large-scale data loading scenarios.
+A high-performance benchmarking tool designed to evaluate and compare different bulk insertion methods in PostgreSQL.
+The tool provides empirical data to help determine the optimal insertion strategy for large-scale data loading scenarios.
 
 ### Key Features
 
 #### Insertion Methods
-| Method        | Description                                                                 | Best For                  |
-|---------------|-----------------------------------------------------------------------------|---------------------------|
-| `copyfrom`    | Direct PostgreSQL COPY protocol (most efficient for raw speed)              | Large, simple data loads  |
-| `pgxbatch`    | Batched prepared statements using pgx library                               | Medium-sized transactions |
-| `unnestbatch` | Array-based bulk operations using UNNEST                                    | Complex data structures   |
+| Method        | Description                                    |
+|---------------|------------------------------------------------|
+| `copyfrom`    | Direct PostgreSQL COPY protocol                |
+| `pgxbatch`    | Batched prepared statements using pgx library  |
+| `unnestbatch` | Array-based bulk operations using UNNEST       |
 
 #### Benchmarking Capabilities
-- Configurable batch sizes (100-50,000 records)
+- Stream processing
+- Configurable batch sizes (for pgxbatch and unnestbatch)
 - Memory and CPU profiling integration
 - Pipeline mode for concurrent processing
 - Clean environment management (`--truncate`)
+
+#### Performance Metrics
+The tool outputs detailed statistics including:
+- Total execution time
+- Records inserted
+- CPU usage
+- Memory allocation
 
 ### Installation & Setup
 
@@ -28,43 +37,56 @@ make build
 
 # Configure environment
 cp env.example .env
-nano .env  # Set your DB parameters
+nano .env  # Set your DB parameters and others
 
 # Start test environment
-make migration-up  # Launches PostgreSQL in Docker
+make db-up # Launches PostgreSQL in Docker
+make migration-up
+
+# or (if an external database is used)
+make migration-up USE_EXTERNAL_DB=yes
 ```
 
 ### Usage Examples
 
 #### Basic Benchmark
 ```bash
-./bin/fillnames -method copyfrom -batch 5000 -truncate
+./bin/fillnames -method pgxbatch -batch 5000 -truncate
 ```
 
 #### Comparative Analysis
 ```bash
+mkdir -p ./tmp
+
 # Test all methods with 10k batches
 for method in copyfrom pgxbatch unnestbatch; do
-  ./bin/fillnames -method $method -batch 10000 -truncate | tee results_${method}.json
+  ./bin/fillnames -method $method -batch 10000 -truncate | tee ./tmp/results_${method}.json
 done
 ```
 
 #### Advanced Profiling
 ```bash
+mkdir -p ./tmp
+
 # CPU profiling
-./bin/fillnames -method pgxbatch -cpuprofile=pgx_cpu.pprof
+./bin/fillnames -method pgxbatch -cpuprofile=./tmp/pgx_cpu.pprof
 
 # Memory analysis
-./bin/fillnames -method unnestbatch -memprofile=unnest_mem.pprof
+./bin/fillnames -method unnestbatch -memprofile=./tmp/unnest_mem.pprof
 ```
 
-### Performance Metrics
-The tool outputs detailed statistics including:
-- Total execution time
-- Records inserted per second
-- Memory allocation
-- Batch processing times
-- Pipeline efficiency (when enabled)
+#### Visualization
+For results analysis, consider:
+
+```bash
+# Generate comparative charts
+find ./tmp -name '*.pprof' | while read -r file; do
+  go tool pprof -png -output="${file%.pprof}.png" ./bin/fillnames "$file"
+done
+
+# Process JSON results
+jq '{method: .config.method, records_sec: (.stats.inserted/(.stats.elapsed/1000))}' ./tmp/*.json
+```
 
 ### Technical Considerations
 
@@ -78,28 +100,3 @@ The tool outputs detailed statistics including:
 - Not designed for production data loading
 - Doesn't handle duplicates/constraints
 - Optimized for insertion speed comparison only
-
-### Interpretation Guide
-Typical performance characteristics:
-
-1. **Small Batches (<1k records)**
-   - `pgxbatch` often performs best
-   - Low memory overhead
-
-2. **Medium Batches (1k-10k records)**
-   - `copyfrom` begins to dominate
-   - `unnestbatch` shows consistent performance
-
-3. **Large Batches (>10k records)**
-   - `copyfrom` is typically fastest
-   - Memory usage becomes significant factor
-
-### Visualization
-For results analysis, consider:
-
-```bash
-# Generate comparative charts
-go tool pprof -png -output=profile.png *.pprof
-
-# Process JSON results
-jq '{method: .config.method, records_sec: (.stats.inserted/(.stats.elapsed/1000))}' *.json
