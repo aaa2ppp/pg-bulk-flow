@@ -33,7 +33,7 @@ const (
 )
 
 var (
-	inputFile = flag.String("i", "", "Input file ($INPUT_FILE, default: stdin)")
+	inputFile = flag.String("i", "", "Input file ($INPUT_FILE, use '-' or empty for stdin)")
 	nameType  = flag.String("type", "", "Type of names to insert ($NAME_TYPE). Available values: "+strutils.Join(model.AllNameTypes, ", "))
 	timeout   = flag.Duration("timeout", defaulTimeout, "Maximum processing duration (0 or negative means no timeout)")
 	method    = flag.String("method", "copyfrom", "Insert method to use: copyfrom, pgxbatch or unnestbatch")
@@ -108,7 +108,7 @@ type insertConfig struct {
 
 func run(cfg *config.Config) int {
 	input := os.Stdin
-	if cfg.InputFile != "" {
+	if cfg.InputFile != "" && cfg.InputFile != "-" {
 		var err error
 		input, err = os.Open(cfg.InputFile)
 		if err != nil {
@@ -187,7 +187,7 @@ func run(cfg *config.Config) int {
 		Stats  totalStats   `json:"stats,omitempty"`
 	}{
 		Config: insertConfig{
-			Input:     cmp.Or(*inputFile, "stdin"),
+			Input:     cmp.Or(cfg.InputFile, "-"),
 			NameType:  cfg.NameType,
 			Method:    *method,
 			BatchSize: *batchSize,
