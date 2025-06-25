@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"encoding/json"
@@ -33,11 +34,11 @@ const (
 )
 
 var (
-	inputFile = flag.String("i", "", "Input file ($INPUT_FILE, default: stdin)")
+	inputFile = flag.String("i", "", "Input file ($INPUT_FILE, use '-' or empty for stdin)")
 	nameType  = flag.String("type", "", "Type of names to insert ($NAME_TYPE). Available values: "+strutils.Join(model.AllNameTypes, ", "))
 	timeout   = flag.Duration("timeout", defaulTimeout, "Maximum processing duration (0 or negative means no timeout)")
 	method    = flag.String("method", "copyfrom", "Insert method to use: copyfrom, pgxbatch or unnestbatch")
-	batchSize = flag.Int("batch", defaultBatchSize, "Number of records per batch insert")
+	batchSize = flag.Int("batch", defaultBatchSize, "Number of records per batch insert (has no effect when method=copyfrom)")
 	truncate  = flag.Bool("truncate", false, "Clear the table before inserting new records")
 	pipeline  = flag.Bool("pipeline", false, "Enable concurrent scanning and inserting for better performance")
 )
@@ -56,12 +57,6 @@ func loadConfig() *config.Config {
 		log.Fatalf("can't load config: %v", err)
 	}
 
-	if *batchSize <= 0 {
-		fmt.Fprintln(os.Stderr, "batch size must be positive")
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
-
 	supportedMethods := map[string]bool{
 		"copyfrom":    true,
 		"pgxbatch":    true,
@@ -69,6 +64,14 @@ func loadConfig() *config.Config {
 	}
 	if !supportedMethods[*method] {
 		fmt.Fprintf(os.Stderr, "invalid method: %s\n", *method)
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+
+	if *method == "copyfrom" {
+		*batchSize = 0 // чтобы избежать появления в отчете
+	} else if *batchSize <= 0 {
+		fmt.Fprintln(os.Stderr, "batch size must be positive")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
@@ -108,7 +111,7 @@ type insertConfig struct {
 
 func run(cfg *config.Config) int {
 	input := os.Stdin
-	if cfg.InputFile != "" {
+	if cfg.InputFile != "" && cfg.InputFile != "-" {
 		var err error
 		input, err = os.Open(cfg.InputFile)
 		if err != nil {
@@ -187,7 +190,7 @@ func run(cfg *config.Config) int {
 		Stats  totalStats   `json:"stats,omitempty"`
 	}{
 		Config: insertConfig{
-			Input:     cmp.Or(*inputFile, "stdin"),
+			Input:     cmp.Or(cfg.InputFile, "-"),
 			NameType:  cfg.NameType,
 			Method:    *method,
 			BatchSize: *batchSize,
@@ -202,11 +205,16 @@ func run(cfg *config.Config) int {
 		},
 	}
 
-	encoder := json.NewEncoder(os.Stdout)
+	var out bytes.Buffer
+	encoder := json.NewEncoder(&out)
 	encoder.SetIndent("", "    ")
 
 	if err := encoder.Encode(results); err != nil {
 		slog.Error("encode stats failded", "error", err)
+		return 1
+	}
+	if _, err := out.WriteTo(os.Stdout); err != nil {
+		slog.Error("write results failed", "error", err)
 		return 1
 	}
 
