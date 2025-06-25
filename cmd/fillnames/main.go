@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"encoding/json"
@@ -202,11 +203,16 @@ func run(cfg *config.Config) int {
 		},
 	}
 
-	encoder := json.NewEncoder(os.Stdout)
+	var out bytes.Buffer
+	encoder := json.NewEncoder(&out)
 	encoder.SetIndent("", "    ")
 
 	if err := encoder.Encode(results); err != nil {
 		slog.Error("encode stats failded", "error", err)
+		return 1
+	}
+	if _, err := out.WriteTo(os.Stdout); err != nil {
+		slog.Error("write results failed", "error", err)
 		return 1
 	}
 
