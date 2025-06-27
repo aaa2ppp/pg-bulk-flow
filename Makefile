@@ -4,7 +4,7 @@ DB_SERVICE := db
 
 USE_EXTERNAL_DB   ?= no
 DB_UP_NEEDED      := $(if $(filter yes,$(USE_EXTERNAL_DB)),,db-up)
-DB_ADDR           := $(if $(filter yes,$(USE_EXTERNAL_DB)),,localhost:5432)
+DB_ADDR           ?= $(if $(filter yes,$(USE_EXTERNAL_DB)),,localhost:5432)
 DB_CHECK_TIMEOUT  ?= 30
 DB_CHECK_INTERVAL ?= 2
 

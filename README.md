@@ -41,10 +41,10 @@ nano .env  # Set your DB parameters and others
 
 # Start test environment
 make db-up # Launches PostgreSQL in Docker
-make migration-up
+make migrate-up
 
 # or (if an external database is used)
-make migration-up USE_EXTERNAL_DB=yes
+make migrate-up USE_EXTERNAL_DB=yes # will be used DB_ADDR from .env
 ```
 
 ### Usage Examples
